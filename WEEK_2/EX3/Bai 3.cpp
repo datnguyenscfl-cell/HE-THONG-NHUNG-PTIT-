@@ -8,9 +8,9 @@
  * PA3 = Analog Input
  *
  * Bien tro:
- *   Chan ngoai  -> 3.3V
- *   Chan giua   -> PA3
- *   Chan ngoai  -> GND
+ *   Chan ngoai -> 3.3V
+ *   Chan giua  -> PA3
+ *   Chan ngoai -> GND
  *
  * Khong dung HAL
  *========================================================*/
@@ -52,7 +52,9 @@
 
 /*========================================================
  * DELAY
+ *
  * CPU = 8 MHz
+ * Tạo khoảng trễ tương đối bằng vòng lặp.
  *========================================================*/
 void delay_ms(unsigned int ms)
 {
@@ -71,40 +73,47 @@ void delay_ms(unsigned int ms)
 /*========================================================
  * USART1 INIT
  *
+ * PA9  = TX
+ * PA10 = RX
+ *
  * PCLK2 = 8 MHz
  * Baudrate = 9600
- *
  * BRR = 0x0341
  *========================================================*/
 void USART1_Init(void)
 {
-    /* Enable GPIOA clock */
+    /* Bước 1: cấp clock cho GPIOA */
     RCC_APB2ENR |= (1 << 2);
 
-    /* Enable USART1 clock */
+    /* Bước 2: cấp clock cho USART1 */
     RCC_APB2ENR |= (1 << 14);
 
 
-    /*
-     * PA9  = USART1_TX
+    /*-----------------------------------------------
+     * PA9 = USART1_TX
      * PA10 = USART1_RX
-     */
+     *
+     * PA9/PA10 nằm trong GPIOA_CRH.
+     *-----------------------------------------------*/
     GPIOA_CRH &= 0xFFFFF00F;
     GPIOA_CRH |= 0x000004B0;
 
 
-    /*
+    /*-----------------------------------------------
      * PCLK2 = 8 MHz
      * Baudrate = 9600
-     */
+     *
+     * USARTDIV = 8MHz / (16 × 9600)
+     * BRR = 0x0341
+     *-----------------------------------------------*/
     USART1_BRR = 0x0341;
 
 
-    /*
-     * UE = bit 13
-     * TE = bit 3
-     * RE = bit 2
-     */
+    /*-----------------------------------------------
+     * UE = bit 13: bật USART
+     * TE = bit 3 : cho phép truyền
+     * RE = bit 2 : cho phép nhận
+     *-----------------------------------------------*/
     USART1_CR1 =
         (1 << 13) |
         (1 << 3)  |
@@ -117,10 +126,13 @@ void USART1_Init(void)
  *========================================================*/
 void USART1_SendChar(char c)
 {
+    /* TXE = bit 7
+     * Chờ thanh ghi truyền rỗng */
     while (!(USART1_SR & (1 << 7)))
     {
     }
 
+    /* Ghi dữ liệu cần truyền vào DR */
     USART1_DR = c;
 }
 
@@ -130,6 +142,7 @@ void USART1_SendChar(char c)
  *========================================================*/
 void USART1_SendString(const char *str)
 {
+    /* Gửi từng ký tự cho đến '\0' */
     while (*str)
     {
         USART1_SendChar(*str);
@@ -140,18 +153,22 @@ void USART1_SendString(const char *str)
 
 /*========================================================
  * USART1 SEND NUMBER
+ *
+ * Chuyển số nguyên thành từng ký tự ASCII
  *========================================================*/
 void USART1_SendNumber(unsigned int number)
 {
     char buffer[10];
     int i = 0;
 
+    /* Trường hợp số = 0 */
     if (number == 0)
     {
         USART1_SendChar('0');
         return;
     }
 
+    /* Tách từng chữ số từ phải sang trái */
     while (number > 0)
     {
         buffer[i] = (number % 10) + '0';
@@ -160,6 +177,7 @@ void USART1_SendNumber(unsigned int number)
         number = number / 10;
     }
 
+    /* Gửi lại theo thứ tự từ trái sang phải */
     while (i > 0)
     {
         i--;
@@ -178,101 +196,93 @@ void USART1_SendNumber(unsigned int number)
 void ADC1_Init(void)
 {
     /*-----------------------------------------------
-     * Enable GPIOA clock
+     * Bước 1: cấp clock cho GPIOA
      *-----------------------------------------------*/
     RCC_APB2ENR |= (1 << 2);
 
 
     /*-----------------------------------------------
-     * Enable ADC1 clock
+     * Bước 2: cấp clock cho ADC1
+     *
+     * ADC1EN = bit 9
      *-----------------------------------------------*/
     RCC_APB2ENR |= (1 << 9);
 
 
     /*-----------------------------------------------
-     * PA3 = Analog Input
+     * Bước 3: cấu hình PA3 làm Analog Input
      *
-     * PA3:
      * MODE3 = 00
      * CNF3  = 00
      *
-     * PA3 nam trong GPIOA_CRL
-     *
-     * Moi chan GPIO chiem 4 bit.
-     * PA3 bat dau tai bit 12.
+     * PA3 nằm trong GPIOA_CRL.
+     * Mỗi chân GPIO chiếm 4 bit.
+     * PA3 bắt đầu tại bit 12.
      *-----------------------------------------------*/
     GPIOA_CRL &= ~(0xF << 12);
 
 
     /*-----------------------------------------------
-     * ADC Channel 3 sample time
-     *
-     * Channel 3:
+     * Bước 4: chọn thời gian lấy mẫu cho Channel 3
      *
      * SMP3 = bit 11:9
      *
-     * 111 = 239.5 cycles
+     * 111 = 239.5 ADC cycles
      *-----------------------------------------------*/
     ADC1_SMPR2 &= ~(7 << 9);
-
-    ADC1_SMPR2 |= (7 << 9);
+    ADC1_SMPR2 |=  (7 << 9);
 
 
     /*-----------------------------------------------
-     * Regular sequence:
-     * Chi co 1 conversion
+     * Bước 5: chọn số lần chuyển đổi
      *
      * L = 0000
+     * → chỉ có 1 conversion
      *-----------------------------------------------*/
     ADC1_SQR1 &= ~(0xF << 20);
 
 
     /*-----------------------------------------------
-     * SQ1 = Channel 3
+     * Bước 6: chọn Channel 3 cho conversion thứ nhất
      *
-     * SQR3 bit 4:0
+     * SQ1 nằm ở SQR3 bit 4:0.
      *-----------------------------------------------*/
     ADC1_SQR3 &= ~(0x1F << 0);
-
-    ADC1_SQR3 |= (3 << 0);
+    ADC1_SQR3 |=  (3 << 0);
 
 
     /*-----------------------------------------------
-     * EXTSEL = 111
+     * Bước 7: chọn Software Trigger
      *
-     * Chon software trigger
-     *
-     * Bit 19:17
+     * EXTSEL = bit 19:17
+     * 111 = SWSTART
      *-----------------------------------------------*/
     ADC1_CR2 &= ~(7 << 17);
-
-    ADC1_CR2 |= (7 << 17);
+    ADC1_CR2 |=  (7 << 17);
 
 
     /*-----------------------------------------------
-     * EXTTRIG = 1
+     * Bước 8: cho phép External Trigger
      *
-     * Bit 20
-     *
-     * Cho phep trigger
+     * EXTTRIG = bit 20
      *-----------------------------------------------*/
     ADC1_CR2 |= (1 << 20);
 
 
     /*-----------------------------------------------
-     * Enable ADC
+     * Bước 9: bật ADC
      *
      * ADON = bit 0
      *-----------------------------------------------*/
     ADC1_CR2 |= (1 << 0);
 
 
-    /* Cho ADC on dinh */
+    /* Chờ ADC ổn định */
     delay_ms(10);
 
 
     /*-----------------------------------------------
-     * Reset calibration
+     * Bước 10: Reset calibration
      *
      * RSTCAL = bit 3
      *-----------------------------------------------*/
@@ -284,7 +294,7 @@ void ADC1_Init(void)
 
 
     /*-----------------------------------------------
-     * Start calibration
+     * Bước 11: bắt đầu calibration
      *
      * CAL = bit 2
      *-----------------------------------------------*/
@@ -299,19 +309,20 @@ void ADC1_Init(void)
 /*========================================================
  * ADC1 READ
  *
- * ADC1 Channel 3
- * PA3
+ * Đọc ADC1 Channel 3 tại PA3.
  *========================================================*/
 unsigned int ADC1_Read(void)
 {
     /*-----------------------------------------------
-     * Clear EOC
+     * Xóa cờ EOC
+     *
+     * EOC = bit 1
      *-----------------------------------------------*/
     ADC1_SR &= ~(1 << 1);
 
 
     /*-----------------------------------------------
-     * Start ADC conversion
+     * Bắt đầu ADC conversion
      *
      * SWSTART = bit 22
      *-----------------------------------------------*/
@@ -319,7 +330,9 @@ unsigned int ADC1_Read(void)
 
 
     /*-----------------------------------------------
-     * Wait EOC
+     * Chờ chuyển đổi hoàn thành
+     *
+     * EOC = 1 → conversion hoàn thành
      *-----------------------------------------------*/
     while (!(ADC1_SR & (1 << 1)))
     {
@@ -327,10 +340,11 @@ unsigned int ADC1_Read(void)
 
 
     /*-----------------------------------------------
-     * Read ADC data
+     * Đọc kết quả ADC
      *
-     * 0    -> 0V
-     * 4095 -> 3.3V
+     * ADC 12 bit:
+     * 0    → 0V
+     * 4095 → 3.3V
      *-----------------------------------------------*/
     return ADC1_DR & 0x0FFF;
 }
@@ -346,7 +360,7 @@ int main(void)
 
 
     /*====================================================
-     * USART1
+     * KHỞI TẠO USART1
      *====================================================*/
     USART1_Init();
 
@@ -358,7 +372,7 @@ int main(void)
 
 
     /*====================================================
-     * ADC1
+     * KHỞI TẠO ADC1
      *====================================================*/
     ADC1_Init();
 
@@ -367,25 +381,21 @@ int main(void)
 
 
     /*====================================================
-     * MAIN LOOP
+     * VÒNG LẶP CHÍNH
      *====================================================*/
     while (1)
     {
-        /*
-         * Bao hieu bat dau doc ADC
-         */
+        /* Báo bắt đầu đọc ADC */
         USART1_SendString("READ ADC...\r\n");
 
 
-        /*
-         * Doc ADC PA3
-         */
+        /* Đọc giá trị ADC từ PA3 */
         adc_value = ADC1_Read();
 
 
-        /*
-         * In ADC
-         */
+        /*-----------------------------------------------
+         * In giá trị ADC
+         *-----------------------------------------------*/
         USART1_SendString("ADC = ");
 
         USART1_SendNumber(adc_value);
@@ -394,53 +404,63 @@ int main(void)
 
 
         /*-----------------------------------------------
-         * ADC -> Voltage
+         * Đổi ADC sang điện áp
          *
          * Vref = 3.3V
          *
          * Voltage(mV)
-         * = ADC * 3300 / 4095
+         * = ADC × 3300 / 4095
          *-----------------------------------------------*/
         voltage_mv =
             (adc_value * 3300) / 4095;
 
 
-        /*
-         * In voltage
-         */
+        /* In điện áp */
         USART1_SendString("Voltage = ");
 
 
-        /* Phan nguyen */
+        /*-----------------------------------------------
+         * Phần nguyên của điện áp
+         *
+         * Ví dụ:
+         * 1650 mV → 1.650 V
+         *-----------------------------------------------*/
         USART1_SendNumber(voltage_mv / 1000);
 
         USART1_SendChar('.');
 
 
-        /* Hang tram */
+        /*-----------------------------------------------
+         * Hàng phần mười
+         *-----------------------------------------------*/
         if ((voltage_mv % 1000) < 100)
         {
             USART1_SendChar('0');
         }
 
 
-        /* Hang chuc */
+        /*-----------------------------------------------
+         * Hàng phần trăm
+         *-----------------------------------------------*/
         if ((voltage_mv % 1000) < 10)
         {
             USART1_SendChar('0');
         }
 
 
-        /* Hang don vi */
+        /*-----------------------------------------------
+         * Ba chữ số sau dấu chấm
+         *-----------------------------------------------*/
         USART1_SendNumber(voltage_mv % 1000);
 
         USART1_SendString(" V\r\n");
 
 
+        /* Phân cách giữa các lần đo */
         USART1_SendString("--------------------\r\n");
 
 
-        /* Doc lai sau 1 giay */
+        /* Đọc lại sau khoảng 1 giây */
         delay_ms(1000);
     }
 }
